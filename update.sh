@@ -1,8 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env sh
 
 # ======================================================
 #          Arch Linux Update-Skript
 # ======================================================
+# Kompatibel mit bash, zsh und anderen POSIX-kompatiblen Shells
 
 # Konfigurationsbereich - Passe diese Werte an deine Bedürfnisse an
 CONFIG_FILE="$HOME/.local/share/update_script/config.json"        # Konfigurationsdatei
@@ -21,11 +22,11 @@ print_colored() {
     local text=$2
     
     case "$color" in
-        "green") echo -e "\e[32m$text\e[0m" ;;
-        "red") echo -e "\e[31m$text\e[0m" ;;
-        "yellow") echo -e "\e[33m$text\e[0m" ;;
-        "blue") echo -e "\e[34m$text\e[0m" ;;
-        *) echo "$text" ;;
+        "green") printf "\033[32m%s\033[0m" "$text" ;;
+        "red") printf "\033[31m%s\033[0m" "$text" ;;
+        "yellow") printf "\033[33m%s\033[0m" "$text" ;;
+        "blue") printf "\033[34m%s\033[0m" "$text" ;;
+        *) printf "%s" "$text" ;;
     esac
 }
 
@@ -38,31 +39,34 @@ print_status() {
     
     if [ "$result" = "success" ]; then
         print_colored "green" "[Erfolg]"
+        printf "\n"
     elif [ "$result" = "warning" ]; then
         print_colored "yellow" "[Hinweis]"
+        printf "\n"
     else
         print_colored "red" "[Fehler]"
+        printf "\n"
     fi
 }
 
 # Funktion für formatierte Abschnitte
 print_section() {
     local title=$1
-    echo ""
+    printf "\n"
     print_colored "blue" "=== $title ==="
-    echo ""
+    printf "\n\n"
 }
 
 # Funktion zur Fehlerprotokollierung
 log_error() {
     local message=$1
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $message" >> ~/update_error_log.txt
-    ERROR_LOG+="$message\n"
+    printf "%s - %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$message" >> ~/update_error_log.txt
+    ERROR_LOG="${ERROR_LOG}${message}\n"
 }
 
 # Funktion für Update-Logs
 log_update() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> ~/update_log.txt
+    printf "%s - %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >> ~/update_log.txt
 }
 
 # Funktion zum Ausführen von Befehlen mit Fehlerbehandlung
@@ -71,7 +75,7 @@ run_command() {
     local operation=$2
     local log_message=$3
     
-    if eval "$command" &> /dev/null; then
+    if eval "$command" > /dev/null 2>&1; then
         print_status "$operation" "success"
         log_update "$log_message - Erfolgreich"
         return 0
@@ -153,24 +157,28 @@ ask_for_update_mode() {
     print_section "Update-Modus Auswahl"
     
     print_colored "yellow" "Welche Art von Update möchten Sie durchführen?"
-    echo "1) Schnellupdate (nur Paketaktualisierungen, schneller)"
-    echo "2) Vollständiges Update (inkl. Mirrors, Schlüssel und Systembereinigung, gründlicher)"
+    printf "\n1) Schnellupdate (nur Paketaktualisierungen, schneller)\n"
+    printf "2) Vollständiges Update (inkl. Mirrors, Schlüssel und Systembereinigung, gründlicher)\n"
     print_colored "yellow" "Bitte wählen Sie [1/2] (Standard: 2):"
+    printf "\n"
     read -r mode_choice
     
     case "$mode_choice" in
         1)
             UPDATE_MODE="quick"
             print_colored "blue" "Schnellupdate wurde ausgewählt."
+            printf "\n"
             log_update "Schnellupdate-Modus ausgewählt"
             ;;
         2|"")
             UPDATE_MODE="full"
             print_colored "blue" "Vollständiges Update wurde ausgewählt."
+            printf "\n"
             log_update "Vollständiges Update-Modus ausgewählt"
             ;;
         *)
             print_colored "yellow" "Ungültige Eingabe, verwende Standardeinstellung (Vollständiges Update)."
+            printf "\n"
             UPDATE_MODE="full"
             log_update "Vollständiges Update-Modus ausgewählt (Standard)"
             ;;
@@ -181,10 +189,13 @@ ask_for_update_mode() {
 ask_for_github_repo() {
     print_section "GitHub-Repository Konfiguration"
     
+    # Standard GitHub-Account
+    DEFAULT_GITHUB_USER="jinxblackzoo"
+    
     # Prüfe, ob bereits eine Konfiguration existiert
     if [ -f "$CONFIG_FILE" ]; then
         # Lade die Konfiguration
-        if command -v jq &> /dev/null; then
+        if command -v jq > /dev/null 2>&1; then
             GITHUB_REPO_URL=$(jq -r '.github_repo_url' "$CONFIG_FILE")
             GITHUB_REPO_BRANCH=$(jq -r '.github_repo_branch' "$CONFIG_FILE")
             LOCAL_REPO_PATH=$(jq -r '.local_repo_path' "$CONFIG_FILE")
@@ -199,140 +210,151 @@ ask_for_github_repo() {
         
         # Prüfe, ob gültige Werte in der Konfiguration gefunden wurden
         if [ -n "$GITHUB_REPO_URL" ]; then
-            print_colored "blue" "Vorhandene GitHub-Konfiguration gefunden:"
-            print_colored "blue" "Repository: $GITHUB_REPO_URL"
-            print_colored "blue" "Branch: $GITHUB_REPO_BRANCH"
+            print_colored "yellow" "GitHub-Repository ist bereits konfiguriert:"
+            printf "\n"
+            printf "URL: %s\n" "$GITHUB_REPO_URL"
+            printf "Branch: %s\n" "$GITHUB_REPO_BRANCH"
+            printf "Lokaler Pfad: %s\n" "$LOCAL_REPO_PATH"
+            printf "Skriptname: %s\n\n" "$SCRIPT_NAME"
             
-            # Frage, ob der Benutzer ein neues Repository konfigurieren möchte
-            print_colored "yellow" "Möchten Sie ein neues GitHub-Repository konfigurieren? (j/n)"
-            read -r answer
+            print_colored "yellow" "Möchten Sie die Konfiguration ändern? (j/n)"
+            printf "\n"
+            read -r change_config
             
-            if [[ ! "$answer" =~ [jJ] ]]; then
-                print_colored "blue" "Die bestehende Konfiguration wird verwendet."
-                
-                # Aktualisiere das Repository, falls es existiert
-                if [ -n "$GITHUB_REPO_URL" ]; then
-                    update_from_github
-                fi
+            if [ "$change_config" != "j" ] && [ "$change_config" != "J" ]; then
                 return 0
             fi
         fi
     fi
     
-    # Neues Repository konfigurieren
-    # GitHub Repository-Name abfragen
-    print_colored "yellow" "Bitte geben Sie den GitHub-Repository-Namen ein (Benutzername/Repository):"
-    read -r github_repo_name
+    # Konfigurationsverzeichnis erstellen, falls es nicht existiert
+    mkdir -p "$(dirname "$CONFIG_FILE")"
     
-    if [ -z "$github_repo_name" ]; then
-        print_colored "yellow" "Kein Repository-Name angegeben. Die GitHub-Integration wird übersprungen."
-        GITHUB_REPO_URL=""
-        GITHUB_REPO_BRANCH=""
-        LOCAL_REPO_PATH=""
-        SCRIPT_NAME=""
-        return 0
+    # Neue Konfiguration abfragen
+    print_colored "yellow" "Bitte geben Sie die GitHub-Repository-URL ein (Format: username/repo):"
+    printf "\n[Standard: %s/arch_update_script]: " "$DEFAULT_GITHUB_USER"
+    read -r repo_input
+    
+    # Standard verwenden, wenn keine Eingabe erfolgt
+    if [ -z "$repo_input" ]; then
+        repo_input="$DEFAULT_GITHUB_USER/arch_update_script"
     fi
     
-    # Repository-URL erstellen
-    GITHUB_REPO_URL="https://github.com/$github_repo_name.git"
+    GITHUB_REPO_URL="https://github.com/$repo_input"
     
-    # Branch abfragen
-    print_colored "yellow" "Bitte geben Sie den Branch-Namen ein (Standard: main):"
-    read -r branch_name
-    if [ -z "$branch_name" ]; then
+    print_colored "yellow" "Bitte geben Sie den Branch-Namen ein:"
+    printf "\n[Standard: main]: "
+    read -r branch_input
+    
+    # Standard verwenden, wenn keine Eingabe erfolgt
+    if [ -z "$branch_input" ]; then
         GITHUB_REPO_BRANCH="main"
     else
-        GITHUB_REPO_BRANCH="$branch_name"
+        GITHUB_REPO_BRANCH="$branch_input"
     fi
     
-    # Skript-Name abfragen
-    print_colored "yellow" "Bitte geben Sie den Namen des Update-Skripts im Repository ein (Standard: update.sh):"
-    read -r script_name
-    if [ -z "$script_name" ]; then
+    print_colored "yellow" "Bitte geben Sie den lokalen Pfad ein, in dem das Repository gespeichert werden soll:"
+    printf "\n[Standard: $HOME/.local/share/arch_update_script]: "
+    read -r path_input
+    
+    # Standard verwenden, wenn keine Eingabe erfolgt
+    if [ -z "$path_input" ]; then
+        LOCAL_REPO_PATH="$HOME/.local/share/arch_update_script"
+    else
+        LOCAL_REPO_PATH="$path_input"
+    fi
+    
+    print_colored "yellow" "Bitte geben Sie den Namen des Update-Skripts im Repository ein:"
+    printf "\n[Standard: update.sh]: "
+    read -r script_input
+    
+    # Standard verwenden, wenn keine Eingabe erfolgt
+    if [ -z "$script_input" ]; then
         SCRIPT_NAME="update.sh"
     else
-        SCRIPT_NAME="$script_name"
+        SCRIPT_NAME="$script_input"
     fi
-    
-    # Lokalen Pfad bestimmen
-    repo_dir=$(echo "$github_repo_name" | sed 's/\//_/g')
-    LOCAL_REPO_PATH="$HOME/.local/share/update_script/$repo_dir"
     
     # Konfiguration speichern
-    mkdir -p "$(dirname "$CONFIG_FILE")"
-    echo "{
-  \"github_repo_url\": \"$GITHUB_REPO_URL\",
-  \"github_repo_branch\": \"$GITHUB_REPO_BRANCH\",
-  \"local_repo_path\": \"$LOCAL_REPO_PATH\",
-  \"script_name\": \"$SCRIPT_NAME\"
-}" > "$CONFIG_FILE"
-    
-    print_colored "green" "GitHub-Repository wurde konfiguriert: $GITHUB_REPO_URL"
-    
-    # Aktualisiere das GitHub Repository
-    if [ -n "$GITHUB_REPO_URL" ]; then
-        update_from_github
+    if command -v jq > /dev/null 2>&1; then
+        # Mit jq speichern
+        printf '{"github_repo_url": "%s", "github_repo_branch": "%s", "local_repo_path": "%s", "script_name": "%s"}' \
+            "$GITHUB_REPO_URL" "$GITHUB_REPO_BRANCH" "$LOCAL_REPO_PATH" "$SCRIPT_NAME" > "$CONFIG_FILE"
+    else
+        # Manuelles JSON erstellen
+        printf '{"github_repo_url": "%s", "github_repo_branch": "%s", "local_repo_path": "%s", "script_name": "%s"}' \
+            "$GITHUB_REPO_URL" "$GITHUB_REPO_BRANCH" "$LOCAL_REPO_PATH" "$SCRIPT_NAME" > "$CONFIG_FILE"
     fi
+    
+    print_colored "green" "GitHub-Repository-Konfiguration gespeichert."
+    printf "\n"
+    log_update "GitHub-Repository-Konfiguration aktualisiert"
+    
+    return 0
 }
 
 # Funktion für GitHub-Repository-Updates
 update_from_github() {
-    print_section "GitHub-Update"
-    
-    # Prüfe, ob git installiert ist
-    if ! command -v git &> /dev/null; then
-        print_status "Prüfung auf git-Installation..." "error"
-        log_error "GitHub-Update fehlgeschlagen - git ist nicht installiert"
-        print_colored "yellow" "Installiere git mit: sudo pacman -S git"
-        return 1
+    # Prüfe, ob Git installiert ist
+    if ! command -v git > /dev/null 2>&1; then
+        print_status "Git ist nicht installiert. Installiere Git..." "warning"
+        
+        if ! run_command "sudo pacman -S --noconfirm git" "Git wird installiert..." "Git-Installation"; then
+            return 1
+        fi
     fi
     
-    # Erstelle Verzeichnisstruktur, falls nicht vorhanden
-    mkdir -p "$LOCAL_REPO_PATH"
+    # Prüfe, ob jq installiert ist (für JSON-Parsing)
+    if ! command -v jq > /dev/null 2>&1; then
+        print_status "jq ist nicht installiert. Installiere jq..." "warning"
+        
+        if ! run_command "sudo pacman -S --noconfirm jq" "jq wird installiert..." "jq-Installation"; then
+            # Fehlschlag von jq ist nicht kritisch
+            print_colored "yellow" "jq konnte nicht installiert werden. Die Skriptfunktionalität ist eingeschränkt."
+            printf "\n"
+        fi
+    fi
+    
+    # Prüfe, ob die GitHub-Konfiguration existiert
+    if [ -z "$GITHUB_REPO_URL" ] || [ -z "$GITHUB_REPO_BRANCH" ] || [ -z "$LOCAL_REPO_PATH" ]; then
+        print_status "GitHub-Konfiguration fehlt oder ist unvollständig." "error"
+        ask_for_github_repo
+    fi
+    
+    print_section "GitHub-Repository Update"
     
     # Prüfe, ob das Repository bereits geklont wurde
     if [ -d "$LOCAL_REPO_PATH/.git" ]; then
-        # Repository existiert bereits, führe pull durch
-        cd "$LOCAL_REPO_PATH" || return 1
-        print_status "GitHub-Repository wird aktualisiert..." ""
+        print_status "Repository wird aktualisiert..." "warning"
         
-        # Speichere den aktuellen Commit-Hash
-        local old_hash=$(git rev-parse HEAD 2>/dev/null)
-        
-        # Führe git pull aus
-        if git pull origin "$GITHUB_REPO_BRANCH" &> /dev/null; then
-            local new_hash=$(git rev-parse HEAD)
-            
-            if [ "$old_hash" = "$new_hash" ]; then
-                print_status "GitHub-Repository wird aktualisiert..." "warning"
-                echo " [Bereits aktuell]"
-                log_update "GitHub-Repository ist bereits aktuell"
+        if cd "$LOCAL_REPO_PATH" > /dev/null 2>&1; then
+            if git pull origin "$GITHUB_REPO_BRANCH" > /dev/null 2>&1; then
+                print_status "Repository wurde aktualisiert." "success"
+                log_update "GitHub-Repository wurde aktualisiert"
+                return 0
             else
-                print_status "GitHub-Repository wird aktualisiert..." "success"
-                log_update "GitHub-Repository aktualisiert von $old_hash auf $new_hash"
-                
-                # Update das Skript, wenn vorhanden
-                update_script_from_repo
+                print_status "Fehler beim Aktualisieren des Repositories." "error"
+                log_error "Fehler beim Aktualisieren des GitHub-Repositories"
+                return 1
             fi
         else
-            print_status "GitHub-Repository wird aktualisiert..." "error"
-            log_error "GitHub-Repository Update fehlgeschlagen"
+            print_status "Konnte nicht in das Repository-Verzeichnis wechseln." "error"
+            log_error "Konnte nicht in das Repository-Verzeichnis wechseln"
             return 1
         fi
     else
-        # Repository muss geklont werden
-        print_status "GitHub-Repository wird geklont..." ""
+        print_status "Repository wird geklont..." "warning"
         
-        if git clone --branch "$GITHUB_REPO_BRANCH" "$GITHUB_REPO_URL" "$LOCAL_REPO_PATH" &> /dev/null; then
-            print_status "GitHub-Repository wird geklont..." "success"
-            log_update "GitHub-Repository erfolgreich geklont"
-            
-            # Update das Skript nach dem Klonen
-            cd "$LOCAL_REPO_PATH" || return 1
-            update_script_from_repo
+        # Erstelle das Verzeichnis, falls es nicht existiert
+        mkdir -p "$LOCAL_REPO_PATH" > /dev/null 2>&1
+        
+        if git clone -b "$GITHUB_REPO_BRANCH" "$GITHUB_REPO_URL" "$LOCAL_REPO_PATH" > /dev/null 2>&1; then
+            print_status "Repository wurde geklont." "success"
+            log_update "GitHub-Repository wurde geklont"
+            return 0
         else
-            print_status "GitHub-Repository wird geklont..." "error"
-            log_error "GitHub-Repository konnte nicht geklont werden"
+            print_status "Fehler beim Klonen des Repositories." "error"
+            log_error "Fehler beim Klonen des GitHub-Repositories"
             return 1
         fi
     fi
@@ -340,22 +362,39 @@ update_from_github() {
 
 # Funktion zum Aktualisieren des Skripts aus dem Repository
 update_script_from_repo() {
-    if [ -f "$SCRIPT_NAME" ]; then
-        # Kopiere das aktualisierte Skript
-        if cp "$SCRIPT_NAME" "$HOME/.local/bin/update" && chmod +x "$HOME/.local/bin/update"; then
-            print_status "Update-Skript wird aktualisiert..." "success"
-            log_update "Update-Skript wurde aus GitHub-Repository aktualisiert"
-            
-            print_colored "yellow" "Das Skript wurde aktualisiert. Führe es erneut aus, um die neuen Funktionen zu nutzen."
-            print_colored "yellow" "Befehl: update"
-        else
-            print_status "Update-Skript wird aktualisiert..." "error"
-            log_error "Konnte Update-Skript nicht aktualisieren"
-        fi
+    print_section "Skript-Update"
+    
+    # Prüfe, ob das Repository existiert
+    if [ ! -d "$LOCAL_REPO_PATH" ]; then
+        print_status "Repository-Verzeichnis existiert nicht." "error"
+        log_error "Repository-Verzeichnis existiert nicht"
+        return 1
+    fi
+    
+    # Prüfe, ob das Skript im Repository existiert
+    if [ ! -f "$LOCAL_REPO_PATH/$SCRIPT_NAME" ]; then
+        print_status "Skript '$SCRIPT_NAME' nicht im Repository gefunden." "error"
+        log_error "Skript '$SCRIPT_NAME' nicht im Repository gefunden"
+        return 1
+    fi
+    
+    # Kopiere das Skript in das aktuelle Verzeichnis
+    if cp "$LOCAL_REPO_PATH/$SCRIPT_NAME" "$0" > /dev/null 2>&1; then
+        print_status "Skript wurde aktualisiert." "success"
+        log_update "Skript wurde aus dem Repository aktualisiert"
+        
+        # Setze Ausführungsrechte
+        chmod +x "$0" > /dev/null 2>&1
+        
+        print_colored "yellow" "Das Skript wurde aktualisiert und wird neu gestartet."
+        printf "\n"
+        
+        # Starte das Skript neu
+        exec "$0"
     else
-        print_status "Update-Skript im Repository suchen..." "warning"
-        echo " [Skript '$SCRIPT_NAME' nicht im Repository gefunden]"
-        log_error "Update-Skript '$SCRIPT_NAME' nicht im Repository gefunden"
+        print_status "Fehler beim Aktualisieren des Skripts." "error"
+        log_error "Fehler beim Aktualisieren des Skripts aus dem Repository"
+        return 1
     fi
 }
 
@@ -363,128 +402,166 @@ update_script_from_repo() {
 perform_package_updates() {
     print_section "Paket-Updates"
     
-    # Pacman-Update
-    run_command "sudo pacman -Syu --noconfirm" "Pacman wird aktualisiert..." "Pacman-Update"
+    # Systemaktualisierung
+    print_colored "blue" "Führe Systemaktualisierung durch..."
+    printf "\n"
     
-    # Yay-Update (falls vorhanden)
-    if command -v yay &> /dev/null; then
-        run_command "yay -Syu --noconfirm" "Yay (AUR) wird aktualisiert..." "Yay-Update"
+    # Arch/Pacman-Updates
+    run_command "sudo pacman -Syu --noconfirm" "Pacman-Updates werden installiert..." "Pacman-Updates"
+    
+    # Yay/AUR-Updates (falls vorhanden)
+    if command -v yay > /dev/null 2>&1; then
+        run_command "yay -Syu --noconfirm" "AUR-Updates werden installiert..." "AUR-Updates"
     fi
     
-    # Snap-Update (falls vorhanden)
-    if command -v snap &> /dev/null; then
-        run_command "sudo snap refresh" "Snap wird aktualisiert..." "Snap-Update"
+    # Flatpak-Updates (falls vorhanden)
+    if command -v flatpak > /dev/null 2>&1; then
+        run_command "flatpak update -y" "Flatpak-Updates werden installiert..." "Flatpak-Updates"
     fi
     
-    # Flatpak-Update (falls vorhanden)
-    if command -v flatpak &> /dev/null; then
-        run_command "flatpak update -y" "Flatpak wird aktualisiert..." "Flatpak-Update"
+    # Snap-Updates (falls vorhanden)
+    if command -v snap > /dev/null 2>&1; then
+        run_command "sudo snap refresh" "Snap-Updates werden installiert..." "Snap-Updates"
     fi
 }
 
 # Funktion für System-Vorbereitung (nur bei vollständigem Update)
 perform_system_preparation() {
     print_section "System-Vorbereitung"
-    run_command "sudo pacman-key --refresh-keys" "Schlüssel werden aktualisiert..." "Schlüsselaktualisierung"
-    run_command "sudo pacman-mirrors --fasttrack" "Mirrors werden aktualisiert..." "Mirror-Aktualisierung"
+    
+    run_command "sudo pacman-mirrors -f 5" "Pacman-Mirrors werden aktualisiert..." "Pacman-Mirrors-Aktualisierung"
+    run_command "sudo pacman -Syy" "Paketdatenbank wird aktualisiert..." "Paketdatenbank-Aktualisierung"
+    run_command "sudo pacman-key --populate archlinux" "Schlüssel werden aktualisiert..." "Pacman-Schlüssel-Aktualisierung"
 }
 
 # Funktion für Systembereinigung (nur bei vollständigem Update)
 perform_system_cleanup() {
-    print_section "System-Bereinigung"
+    print_section "Systembereinigung"
     
-    # Cache-Bereinigung
-    if command -v yay &> /dev/null; then
-        run_command "yay -Sc --noconfirm" "Paket-Cache wird bereinigt..." "Cache-Bereinigung"
-    else
-        run_command "sudo pacman -Sc --noconfirm" "Paket-Cache wird bereinigt..." "Cache-Bereinigung"
-    fi
+    # Pacman-Cache bereinigen
+    run_command "sudo pacman -Sc --noconfirm" "Pacman-Cache wird bereinigt..." "Pacman-Cache-Bereinigung"
     
-    # Nicht mehr benötigte Abhängigkeiten entfernen
-    orphans=$(pacman -Qtdq 2>/dev/null)
+    # Verwaiste Pakete entfernen
+    print_status "Verwaiste Pakete werden gesucht..." "warning"
+    
+    orphans=$(pacman -Qtdq)
     if [ -n "$orphans" ]; then
-        run_command "sudo pacman -Rns $(pacman -Qtdq) --noconfirm" "Nicht benötigte Abhängigkeiten werden entfernt..." "Abhängigkeiten-Bereinigung"
+        if printf "%s" "$orphans" | sudo pacman -Rns - > /dev/null 2>&1; then
+            print_status "Verwaiste Pakete wurden entfernt." "success"
+            log_update "Verwaiste Pakete wurden entfernt"
+        else
+            print_status "Fehler beim Entfernen verwaister Pakete." "error"
+            log_error "Fehler beim Entfernen verwaister Pakete"
+        fi
     else
-        print_status "Nicht benötigte Abhängigkeiten werden gesucht..." "warning"
-        echo " [Keine zu entfernenden Abhängigkeiten gefunden]"
+        print_status "Keine verwaisten Pakete gefunden." "success"
     fi
+    
+    # Temporäre Dateien bereinigen
+    run_command "sudo rm -rf /tmp/*" "Temporäre Dateien werden bereinigt..." "Temporäre Dateien-Bereinigung"
+    
+    # Journal bereinigen (behalte nur die letzten 7 Tage)
+    run_command "sudo journalctl --vacuum-time=7d" "Journal wird bereinigt..." "Journal-Bereinigung"
 }
 
 # Hauptprogramm
 main() {
-    # Initialisierungen
+    # Begrüßungsnachricht
+    printf "\n"
+    print_colored "blue" "========================================================"
+    printf "\n"
+    print_colored "blue" "              Arch Linux Update-Skript"
+    printf "\n"
+    print_colored "blue" "========================================================"
+    printf "\n\n"
+    
+    # Initialisieren der Fehlerprotokolle
     ERROR_LOG=""
-    USER_NAME=$(whoami)
-    CURRENT_SHELL=$(basename "$SHELL")
-    LOG_DIR="$HOME/.local/share/update_script"
-    mkdir -p "$LOG_DIR"
     
-    # Begrüßung
-    clear
-    print_colored "blue" "======================================"
-    print_colored "blue" "  Hallo $USER_NAME, dein Update beginnt jetzt..."
-    print_colored "blue" "======================================"
-    echo "Aktuelle Shell: $CURRENT_SHELL"
-    echo ""
-    print_colored "yellow" "Bitte habe etwas Geduld, während die Updates durchgeführt werden."
-    print_colored "yellow" "Du wirst über Fortschritt und eventuelle Probleme informiert."
+    # Prüfe Internetverbindung
+    if ! ping -c 1 archlinux.org > /dev/null 2>&1; then
+        print_colored "red" "Keine Internetverbindung. Das Update wird abgebrochen."
+        printf "\n"
+        exit 1
+    fi
     
-    # Sudo-Passwort abfragen
-    sudo -v
-    
-    # Prüfe und installiere benötigte Pakete
+    # Prüfe, ob notwendige Pakete installiert sind
     check_and_install_packages
     
-    # GitHub-Repository konfigurieren oder aktualisieren
+    # Frage den Benutzer nach GitHub-Repository-Informationen
     ask_for_github_repo
     
-    # Update-Modus abfragen
+    # Aktualisiere das Repository
+    update_from_github
+    
+    # Aktualisiere das Skript, falls eine neue Version im Repository verfügbar ist
+    if [ -f "$LOCAL_REPO_PATH/$SCRIPT_NAME" ]; then
+        local_hash=$(md5sum "$0" | cut -d' ' -f1)
+        repo_hash=$(md5sum "$LOCAL_REPO_PATH/$SCRIPT_NAME" | cut -d' ' -f1)
+        
+        if [ "$local_hash" != "$repo_hash" ]; then
+            print_colored "yellow" "Eine neue Version des Skripts wurde gefunden."
+            printf "\n"
+            print_colored "yellow" "Möchten Sie das Skript aktualisieren? (j/n)"
+            printf "\n"
+            read -r update_script
+            
+            if [ "$update_script" = "j" ] || [ "$update_script" = "J" ]; then
+                update_script_from_repo
+                # Das Skript wird neu gestartet, wenn es aktualisiert wurde
+            fi
+        fi
+    fi
+    
+    # Frage den Benutzer nach dem Update-Modus
     ask_for_update_mode
     
-    # Je nach Update-Modus verschiedene Schritte ausführen
+    # Führe System-Vorbereitung durch (nur bei vollständigem Update)
     if [ "$UPDATE_MODE" = "full" ]; then
-        # Vollständiges Update
-        
-        # Schlüssel und Mirrors aktualisieren
         perform_system_preparation
-    
-        # Pakete aktualisieren
-        perform_package_updates
-    
-        # System aufräumen
-        perform_system_cleanup
-    else
-        # Schnellupdate - nur Pakete aktualisieren
-        print_colored "yellow" "Schnellupdate wird durchgeführt (ohne Mirror-Update, Schlüssel-Update und Systembereinigung)."
-        perform_package_updates
     fi
     
-    # Abschlussmeldung und Fehlerausgabe
-    print_section "Zusammenfassung"
+    # Führe Paket-Updates durch
+    perform_package_updates
     
-    # Gesamtlogbuch-Eintrag
+    # Führe Systembereinigung durch (nur bei vollständigem Update)
     if [ "$UPDATE_MODE" = "full" ]; then
-        log_update "Vollständiges System-Update abgeschlossen"
-    else
-        log_update "Schnellupdate abgeschlossen"
+        perform_system_cleanup
     fi
     
-    # Fehler ausgeben, falls vorhanden
+    # Ausgabe einer Erfolgsmeldung
+    printf "\n"
+    print_colored "green" "========================================================"
+    printf "\n"
+    print_colored "green" "              Update wurde abgeschlossen"
+    printf "\n"
+    print_colored "green" "========================================================"
+    printf "\n\n"
+    
+    # Ausgabe von Fehlermeldungen, falls vorhanden
     if [ -n "$ERROR_LOG" ]; then
-        print_colored "red" "Während des Updates sind Fehler aufgetreten:"
-        echo -e "$ERROR_LOG"
-        print_colored "yellow" "Detaillierte Fehlerprotokolle findest du in ~/update_error_log.txt"
-    else
-        print_colored "green" "Alle Schritte wurden erfolgreich abgeschlossen!"
+        print_colored "red" "Es sind Fehler aufgetreten:"
+        printf "\n"
+        printf "%s" "$ERROR_LOG"
+        printf "\nSiehe ~/update_error_log.txt für Details.\n"
     fi
     
-    print_colored "blue" "======================================"
-    print_colored "green" "  Update-Vorgang abgeschlossen!"
-    if [ "$UPDATE_MODE" = "quick" ]; then
-        print_colored "yellow" "  (Schnellupdate-Modus)"
+    # Frage, ob ein Neustart erwünscht ist
+    print_colored "yellow" "Möchten Sie das System neu starten? (j/n)"
+    printf "\n"
+    read -r reboot_choice
+    
+    if [ "$reboot_choice" = "j" ] || [ "$reboot_choice" = "J" ]; then
+        print_colored "blue" "System wird neu gestartet..."
+        printf "\n"
+        log_update "System wird neu gestartet"
+        sudo reboot
+    else
+        print_colored "blue" "Neustart abgebrochen."
+        printf "\n"
     fi
-    print_colored "blue" "  Logbucheintrag gespeichert in ~/update_log.txt"
-    print_colored "blue" "======================================"
+    
+    exit 0
 }
 
 # Skript ausführen
