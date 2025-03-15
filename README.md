@@ -164,6 +164,28 @@ Das Skript kann aus einem GitHub-Repository aktualisiert werden:
 
 Alle Einstellungen werden in `~/.local/share/update_script/config.json` gespeichert.
 
+### Manuelle Aktualisierung des Skripts
+
+Um das Update-Skript manuell auf die neueste Version zu aktualisieren, kannst du einen der folgenden Befehle verwenden:
+
+#### Für systemweite Installation:
+```bash
+# Neueste Version herunterladen und installieren
+sudo curl -sSL https://raw.githubusercontent.com/jinxblackzoo/arch_update_script/main/update.sh -o /usr/local/bin/update && sudo chmod +x /usr/local/bin/update
+
+# Alternativ: Wenn du das Repository bereits geklont hast
+cd /pfad/zum/lokalen/repository && git pull && sudo cp update.sh /usr/local/bin/update
+```
+
+#### Für Installation im Home-Verzeichnis:
+```bash
+# Neueste Version herunterladen und installieren
+curl -sSL https://raw.githubusercontent.com/jinxblackzoo/arch_update_script/main/update.sh -o ~/.local/bin/update && chmod +x ~/.local/bin/update
+
+# Alternativ: Wenn du das Repository bereits geklont hast
+cd /pfad/zum/lokalen/repository && git pull && cp update.sh ~/.local/bin/update
+```
+
 ## Konfigurationsdatei
 
 Die Konfigurationsdatei wird automatisch an folgendem Ort erstellt:
