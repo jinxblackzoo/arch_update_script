@@ -185,112 +185,116 @@ ask_for_update_mode() {
     esac
 }
 
-# Funktion zum Abfragen von GitHub-Repository-Informationen
+# Funktion zur GitHub-Abfrage und Repository-Konfiguration
 ask_for_github_repo() {
-    print_section "GitHub-Repository Konfiguration"
+    print_section "GitHub-Integration"
     
-    # Standard GitHub-Account
-    DEFAULT_GITHUB_USER="jinxblackzoo"
+    print_colored "yellow" "Möchten Sie ein GitHub-Repository hinzufügen? (j/n)"
+    printf "\n"
+    read -r github_choice
     
-    # Prüfe, ob bereits eine Konfiguration existiert
-    if [ -f "$CONFIG_FILE" ]; then
-        # Lade die Konfiguration
-        if command -v jq > /dev/null 2>&1; then
-            GITHUB_REPO_URL=$(jq -r '.github_repo_url' "$CONFIG_FILE")
-            GITHUB_REPO_BRANCH=$(jq -r '.github_repo_branch' "$CONFIG_FILE")
-            LOCAL_REPO_PATH=$(jq -r '.local_repo_path' "$CONFIG_FILE")
-            SCRIPT_NAME=$(jq -r '.script_name' "$CONFIG_FILE")
-        else
-            # Primitive Parsing ohne jq
-            GITHUB_REPO_URL=$(grep -o '"github_repo_url": "[^"]*"' "$CONFIG_FILE" | cut -d'"' -f4)
-            GITHUB_REPO_BRANCH=$(grep -o '"github_repo_branch": "[^"]*"' "$CONFIG_FILE" | cut -d'"' -f4)
-            LOCAL_REPO_PATH=$(grep -o '"local_repo_path": "[^"]*"' "$CONFIG_FILE" | cut -d'"' -f4)
-            SCRIPT_NAME=$(grep -o '"script_name": "[^"]*"' "$CONFIG_FILE" | cut -d'"' -f4)
+    if [ "$github_choice" = "j" ] || [ "$github_choice" = "J" ]; then
+        # Standard GitHub-Account
+        DEFAULT_GITHUB_USER="jinxblackzoo"
+        
+        # Konfigurationsverzeichnis erstellen, falls es nicht existiert
+        mkdir -p "$(dirname "$CONFIG_FILE")"
+        
+        # Abfrage der Repository-Informationen
+        print_colored "yellow" "Bitte geben Sie die GitHub-Repository-URL ein (Format: benutzername/repo):"
+        printf "\nBeispiel: %s/repo\n" "$DEFAULT_GITHUB_USER"
+        read -r repo_input
+        
+        # Standardwerte verwenden, wenn keine Eingabe erfolgt
+        if [ -z "$repo_input" ]; then
+            repo_input="$DEFAULT_GITHUB_USER/arch_update_script"
+            print_colored "blue" "Keine Eingabe erkannt. Verwende Standardwert: $repo_input"
+            printf "\n"
         fi
         
-        # Prüfe, ob gültige Werte in der Konfiguration gefunden wurden
-        if [ -n "$GITHUB_REPO_URL" ]; then
-            print_colored "yellow" "GitHub-Repository ist bereits konfiguriert:"
-            printf "\n"
-            printf "URL: %s\n" "$GITHUB_REPO_URL"
-            printf "Branch: %s\n" "$GITHUB_REPO_BRANCH"
-            printf "Lokaler Pfad: %s\n" "$LOCAL_REPO_PATH"
-            printf "Skriptname: %s\n\n" "$SCRIPT_NAME"
+        # Prüfen, ob die Eingabe das richtige Format hat
+        if printf "%s" "$repo_input" | grep -qE '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
+            # Repository-Informationen extrahieren
+            repo_parts=$(printf "%s" "$repo_input" | tr '/' ' ')
+            repo_user=$(printf "%s" "$repo_parts" | awk '{print $1}')
+            repo_name=$(printf "%s" "$repo_parts" | awk '{print $2}')
             
-            print_colored "yellow" "Möchten Sie die Konfiguration ändern? (j/n)"
-            printf "\n"
-            read -r change_config
+            # Repository-URL
+            GITHUB_REPO_URL="https://github.com/$repo_user/$repo_name.git"
             
-            if [ "$change_config" != "j" ] && [ "$change_config" != "J" ]; then
-                return 0
+            # Branch abfragen (mit Standard "main")
+            print_colored "yellow" "Bitte geben Sie den Branch ein (Standard: main):"
+            printf "\n"
+            read -r branch_input
+            
+            if [ -z "$branch_input" ]; then
+                GITHUB_REPO_BRANCH="main"
+                print_colored "blue" "Kein Branch angegeben. Verwende Standard: main"
+                printf "\n"
+            else
+                GITHUB_REPO_BRANCH="$branch_input"
             fi
+            
+            # Skript-Name abfragen (mit Standard "update.sh")
+            print_colored "yellow" "Bitte geben Sie den Namen des Update-Skripts im Repository an (Standard: update.sh):"
+            printf "\n"
+            read -r script_input
+            
+            if [ -z "$script_input" ]; then
+                SCRIPT_NAME="update.sh"
+                print_colored "blue" "Kein Skript-Name angegeben. Verwende Standard: update.sh"
+                printf "\n"
+            else
+                SCRIPT_NAME="$script_input"
+            fi
+            
+            # Lokalen Pfad für das Repository festlegen
+            repo_dir="${repo_user}_${repo_name}"
+            LOCAL_REPO_PATH="$HOME/.local/share/update_script/$repo_dir"
+            
+            # Konfiguration in JSON-Datei speichern
+            if command -v jq > /dev/null 2>&1; then
+                # Verwende jq, falls verfügbar
+                printf '{"github_repo_url": "%s", "github_repo_branch": "%s", "local_repo_path": "%s", "script_name": "%s"}' \
+                       "$GITHUB_REPO_URL" "$GITHUB_REPO_BRANCH" "$LOCAL_REPO_PATH" "$SCRIPT_NAME" | \
+                       jq '.' > "$CONFIG_FILE"
+                print_status "GitHub-Repository-Konfiguration gespeichert" "success"
+            else
+                # Fallback ohne jq
+                printf '{\n  "github_repo_url": "%s",\n  "github_repo_branch": "%s",\n  "local_repo_path": "%s",\n  "script_name": "%s"\n}' \
+                       "$GITHUB_REPO_URL" "$GITHUB_REPO_BRANCH" "$LOCAL_REPO_PATH" "$SCRIPT_NAME" > "$CONFIG_FILE"
+                print_status "GitHub-Repository-Konfiguration gespeichert (ohne jq)" "success"
+            fi
+            
+            # Repository aktualisieren
+            update_from_github
+            
+            # Aktualisiere das Skript, falls eine neue Version im Repository verfügbar ist
+            if [ -f "$LOCAL_REPO_PATH/$SCRIPT_NAME" ]; then
+                local_hash=$(md5sum "$0" | cut -d' ' -f1)
+                repo_hash=$(md5sum "$LOCAL_REPO_PATH/$SCRIPT_NAME" | cut -d' ' -f1)
+                
+                if [ "$local_hash" != "$repo_hash" ]; then
+                    print_colored "yellow" "Eine neue Version des Skripts wurde gefunden."
+                    printf "\n"
+                    print_colored "yellow" "Möchten Sie das Skript aktualisieren? (j/n)"
+                    printf "\n"
+                    read -r update_script
+                    
+                    if [ "$update_script" = "j" ] || [ "$update_script" = "J" ]; then
+                        update_script_from_repo
+                        # Das Skript wird neu gestartet, wenn es aktualisiert wurde
+                    fi
+                fi
+            fi
+        else
+            print_colored "red" "Ungültiges Repository-Format. Verwende Format: benutzername/repo"
+            printf "\n"
         fi
-    fi
-    
-    # Konfigurationsverzeichnis erstellen, falls es nicht existiert
-    mkdir -p "$(dirname "$CONFIG_FILE")"
-    
-    # Neue Konfiguration abfragen
-    print_colored "yellow" "Bitte geben Sie die GitHub-Repository-URL ein (Format: username/repo):"
-    printf "\n[Standard: %s/arch_update_script]: " "$DEFAULT_GITHUB_USER"
-    read -r repo_input
-    
-    # Standard verwenden, wenn keine Eingabe erfolgt
-    if [ -z "$repo_input" ]; then
-        repo_input="$DEFAULT_GITHUB_USER/arch_update_script"
-    fi
-    
-    GITHUB_REPO_URL="https://github.com/$repo_input"
-    
-    print_colored "yellow" "Bitte geben Sie den Branch-Namen ein:"
-    printf "\n[Standard: main]: "
-    read -r branch_input
-    
-    # Standard verwenden, wenn keine Eingabe erfolgt
-    if [ -z "$branch_input" ]; then
-        GITHUB_REPO_BRANCH="main"
     else
-        GITHUB_REPO_BRANCH="$branch_input"
+        print_colored "blue" "GitHub-Integration übersprungen."
+        printf "\n"
     fi
-    
-    print_colored "yellow" "Bitte geben Sie den lokalen Pfad ein, in dem das Repository gespeichert werden soll:"
-    printf "\n[Standard: $HOME/.local/share/arch_update_script]: "
-    read -r path_input
-    
-    # Standard verwenden, wenn keine Eingabe erfolgt
-    if [ -z "$path_input" ]; then
-        LOCAL_REPO_PATH="$HOME/.local/share/arch_update_script"
-    else
-        LOCAL_REPO_PATH="$path_input"
-    fi
-    
-    print_colored "yellow" "Bitte geben Sie den Namen des Update-Skripts im Repository ein:"
-    printf "\n[Standard: update.sh]: "
-    read -r script_input
-    
-    # Standard verwenden, wenn keine Eingabe erfolgt
-    if [ -z "$script_input" ]; then
-        SCRIPT_NAME="update.sh"
-    else
-        SCRIPT_NAME="$script_input"
-    fi
-    
-    # Konfiguration speichern
-    if command -v jq > /dev/null 2>&1; then
-        # Mit jq speichern
-        printf '{"github_repo_url": "%s", "github_repo_branch": "%s", "local_repo_path": "%s", "script_name": "%s"}' \
-            "$GITHUB_REPO_URL" "$GITHUB_REPO_BRANCH" "$LOCAL_REPO_PATH" "$SCRIPT_NAME" > "$CONFIG_FILE"
-    else
-        # Manuelles JSON erstellen
-        printf '{"github_repo_url": "%s", "github_repo_branch": "%s", "local_repo_path": "%s", "script_name": "%s"}' \
-            "$GITHUB_REPO_URL" "$GITHUB_REPO_BRANCH" "$LOCAL_REPO_PATH" "$SCRIPT_NAME" > "$CONFIG_FILE"
-    fi
-    
-    print_colored "green" "GitHub-Repository-Konfiguration gespeichert."
-    printf "\n"
-    log_update "GitHub-Repository-Konfiguration aktualisiert"
-    
-    return 0
 }
 
 # Funktion für GitHub-Repository-Updates
@@ -492,44 +496,6 @@ check_sudo() {
     fi
 }
 
-# Funktion zur GitHub-Abfrage
-ask_for_github_update() {
-    print_section "GitHub-Integration"
-    
-    print_colored "yellow" "Möchten Sie das Skript aus einem GitHub-Repository aktualisieren? (j/n)"
-    printf "\n"
-    read -r github_choice
-    
-    if [ "$github_choice" = "j" ] || [ "$github_choice" = "J" ]; then
-        print_colored "blue" "GitHub-Update aktiviert."
-        printf "\n"
-        ask_for_github_repo
-        update_from_github
-        
-        # Aktualisiere das Skript, falls eine neue Version im Repository verfügbar ist
-        if [ -f "$LOCAL_REPO_PATH/$SCRIPT_NAME" ]; then
-            local_hash=$(md5sum "$0" | cut -d' ' -f1)
-            repo_hash=$(md5sum "$LOCAL_REPO_PATH/$SCRIPT_NAME" | cut -d' ' -f1)
-            
-            if [ "$local_hash" != "$repo_hash" ]; then
-                print_colored "yellow" "Eine neue Version des Skripts wurde gefunden."
-                printf "\n"
-                print_colored "yellow" "Möchten Sie das Skript aktualisieren? (j/n)"
-                printf "\n"
-                read -r update_script
-                
-                if [ "$update_script" = "j" ] || [ "$update_script" = "J" ]; then
-                    update_script_from_repo
-                    # Das Skript wird neu gestartet, wenn es aktualisiert wurde
-                fi
-            fi
-        fi
-    else
-        print_colored "blue" "GitHub-Update übersprungen."
-        printf "\n"
-    fi
-}
-
 # Hauptprogramm
 main() {
     # Begrüßungsnachricht
@@ -557,8 +523,8 @@ main() {
     # Prüfe, ob notwendige Pakete installiert sind
     check_and_install_packages
     
-    # Frage den Benutzer nach GitHub-Update
-    ask_for_github_update
+    # Frage den Benutzer nach GitHub-Repository-Informationen
+    ask_for_github_repo
     
     # Frage den Benutzer nach dem Update-Modus
     ask_for_update_mode
