@@ -108,9 +108,11 @@ sudo mkdir -p /usr/local/bin && sudo cp /home/jinx/Dokumente/GitHub/arch_update_
 
 ```bash
 # Systemweite Installation (erfordert Root-Rechte)
+# Verfügbar für alle Benutzer des Systems - empfohlen für Computer mit mehreren Benutzern
 curl -sSL https://raw.githubusercontent.com/jinxblackzoo/arch_update_script/main/update.sh | sudo tee /usr/local/bin/update > /dev/null && sudo chmod +x /usr/local/bin/update && echo "Das Update-Skript wurde installiert und ist bereit zur Verwendung!"
 
 # ODER: Installation im Home-Verzeichnis (ohne Root-Rechte)
+# Nur für den installierenden Benutzer verfügbar - empfohlen für persönliche Computer
 mkdir -p ~/.local/bin && curl -sSL https://raw.githubusercontent.com/jinxblackzoo/arch_update_script/main/update.sh | tee ~/.local/bin/update > /dev/null && chmod +x ~/.local/bin/update && echo "Das Update-Skript wurde in ~/.local/bin/update installiert!"
 ```
 

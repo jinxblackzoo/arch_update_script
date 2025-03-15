@@ -299,6 +299,12 @@ update_from_github() {
     if ! command -v git > /dev/null 2>&1; then
         print_status "Git ist nicht installiert. Installiere Git..." "warning"
         
+        if ! command -v git &> /dev/null; then
+            run_command "sudo pacman -S --noconfirm git" "Git wird installiert..." "Git-Installation"
+        fi
+        
+        echo "Installiere Git..."
+        
         if ! run_command "sudo pacman -S --noconfirm git" "Git wird installiert..." "Git-Installation"; then
             return 1
         fi
@@ -464,6 +470,66 @@ perform_system_cleanup() {
     run_command "sudo journalctl --vacuum-time=7d" "Journal wird bereinigt..." "Journal-Bereinigung"
 }
 
+# Funktion zum Überprüfen von Root-Rechten
+check_sudo() {
+    print_section "Root-Rechte Überprüfung"
+    
+    print_colored "yellow" "Dieses Skript benötigt Root-Rechte für verschiedene Operationen."
+    printf "\nBitte geben Sie Ihr Passwort ein, wenn Sie dazu aufgefordert werden.\n"
+    
+    # Sudo-Befehl testen, um die Rechte zu aktivieren
+    if sudo -v; then
+        print_status "Root-Rechte erhalten" "success"
+        log_update "Root-Rechte wurden erfolgreich aktiviert"
+        return 0
+    else
+        print_status "Root-Rechte konnten nicht erhalten werden" "error"
+        log_error "Fehler beim Erhalten von Root-Rechten"
+        printf "\n"
+        print_colored "red" "Ohne Root-Rechte können wichtige Update-Funktionen nicht ausgeführt werden."
+        printf "\nDas Skript wird beendet.\n"
+        exit 1
+    fi
+}
+
+# Funktion zur GitHub-Abfrage
+ask_for_github_update() {
+    print_section "GitHub-Integration"
+    
+    print_colored "yellow" "Möchten Sie das Skript aus einem GitHub-Repository aktualisieren? (j/n)"
+    printf "\n"
+    read -r github_choice
+    
+    if [ "$github_choice" = "j" ] || [ "$github_choice" = "J" ]; then
+        print_colored "blue" "GitHub-Update aktiviert."
+        printf "\n"
+        ask_for_github_repo
+        update_from_github
+        
+        # Aktualisiere das Skript, falls eine neue Version im Repository verfügbar ist
+        if [ -f "$LOCAL_REPO_PATH/$SCRIPT_NAME" ]; then
+            local_hash=$(md5sum "$0" | cut -d' ' -f1)
+            repo_hash=$(md5sum "$LOCAL_REPO_PATH/$SCRIPT_NAME" | cut -d' ' -f1)
+            
+            if [ "$local_hash" != "$repo_hash" ]; then
+                print_colored "yellow" "Eine neue Version des Skripts wurde gefunden."
+                printf "\n"
+                print_colored "yellow" "Möchten Sie das Skript aktualisieren? (j/n)"
+                printf "\n"
+                read -r update_script
+                
+                if [ "$update_script" = "j" ] || [ "$update_script" = "J" ]; then
+                    update_script_from_repo
+                    # Das Skript wird neu gestartet, wenn es aktualisiert wurde
+                fi
+            fi
+        fi
+    else
+        print_colored "blue" "GitHub-Update übersprungen."
+        printf "\n"
+    fi
+}
+
 # Hauptprogramm
 main() {
     # Begrüßungsnachricht
@@ -485,33 +551,14 @@ main() {
         exit 1
     fi
     
+    # Prüfe und fordere Root-Rechte an
+    check_sudo
+    
     # Prüfe, ob notwendige Pakete installiert sind
     check_and_install_packages
     
-    # Frage den Benutzer nach GitHub-Repository-Informationen
-    ask_for_github_repo
-    
-    # Aktualisiere das Repository
-    update_from_github
-    
-    # Aktualisiere das Skript, falls eine neue Version im Repository verfügbar ist
-    if [ -f "$LOCAL_REPO_PATH/$SCRIPT_NAME" ]; then
-        local_hash=$(md5sum "$0" | cut -d' ' -f1)
-        repo_hash=$(md5sum "$LOCAL_REPO_PATH/$SCRIPT_NAME" | cut -d' ' -f1)
-        
-        if [ "$local_hash" != "$repo_hash" ]; then
-            print_colored "yellow" "Eine neue Version des Skripts wurde gefunden."
-            printf "\n"
-            print_colored "yellow" "Möchten Sie das Skript aktualisieren? (j/n)"
-            printf "\n"
-            read -r update_script
-            
-            if [ "$update_script" = "j" ] || [ "$update_script" = "J" ]; then
-                update_script_from_repo
-                # Das Skript wird neu gestartet, wenn es aktualisiert wurde
-            fi
-        fi
-    fi
+    # Frage den Benutzer nach GitHub-Update
+    ask_for_github_update
     
     # Frage den Benutzer nach dem Update-Modus
     ask_for_update_mode
